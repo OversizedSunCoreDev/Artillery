@@ -9,10 +9,10 @@
 #include "ArtilleryCommonTypes.h"
 #include "Containers/TripleBuffer.h"
 #include "FArtilleryBusyWorker.h"
-#include "FArtilleryGun.h"
 #include "LocomotionParams.h"
 #include "ConservedAttribute.h"
 #include "FArtilleryTicklitesThread.h"
+#include "KeyCarry.h"
 #include "TransformDispatch.h"
 #include "ArtilleryDispatch.generated.h"
 
@@ -42,6 +42,7 @@
  * 
  * Iris does normal replication on a slow cadence as a fall back and to provide attribute sync reassurances.
  */
+struct FArtilleryGun;
 namespace Arty
 {
 	DECLARE_MULTICAST_DELEGATE(OnArtilleryActivated);
@@ -66,9 +67,13 @@ UCLASS()
 class ARTILLERYRUNTIME_API UArtilleryDispatch : public UTickableWorldSubsystem
 {
 	GENERATED_BODY()
+	
 	friend class FArtilleryBusyWorker;
 	friend class FArtilleryTicklitesWorker<UArtilleryDispatch>;
 	friend class UCanonicalInputStreamECS;
+	friend class UArtilleryLibrary;
+protected:
+	static inline UArtilleryDispatch* SelfPtr = nullptr;
 public:
 	
 	OnArtilleryActivated BindToArtilleryActivated;
@@ -78,10 +83,13 @@ const
 	{
 		return ArtilleryAsyncWorldSim.TickliteNow;
 	};
-	void GENERATE_RECHARGE(ObjectKey Self);
+	void REGISTER_ENTITY_FINAL_TICK_RESOLVER(ActorKey Self);
+	void REGISTER_PROJECTILE_FINAL_TICK_RESOLVER(uint32 MaximumLifespanInTicks, FSkeletonKey Self);
+	void REGISTER_GUN_FINAL_TICK_RESOLVER(FGunKey Self);
+	void INITIATE_JUMP_TIMER(FSkeletonKey Self);
 
 	//Forwarding for the TickliteThread.
-	TOptional<FTransform> GetTransformShadowByObjectKey(ObjectKey Target, ArtilleryTime Now)
+	TOptional<FTransform> GetTransformShadowByObjectKey(FSkeletonKey Target, ArtilleryTime Now)
 	{
 		if(GetWorld())
 		{
@@ -94,7 +102,7 @@ const
 		return TOptional<FTransform>();
 	}
 
-	FBLet GetFBLetByObjectKey(ObjectKey Target, ArtilleryTime Now)
+	FBLet GetFBLetByObjectKey(FSkeletonKey Target, ArtilleryTime Now)
 	{
 		if(GetWorld())
 		{
@@ -138,6 +146,7 @@ protected:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
 	virtual void Deinitialize() override;
+	TSharedPtr< JOLT::FWorldSimOwner> HoldOpen;
 	
 
 	//this is the underlying function mapping we use to queue up Gun Activations.
@@ -152,7 +161,9 @@ protected:
 	TSharedPtr< TMap<ActorKey, FArtilleryRunLocomotionFromDispatch>> ActorToLocomotionMapping;
 	
 	// NOTTODO: It's built!
-	TSharedPtr<TMap<ObjectKey, AttrMapPtr>> AttributeSetToDataMapping;
+	TSharedPtr<TMap<FSkeletonKey, AttrMapPtr>> AttributeSetToDataMapping;
+	
+	TSharedPtr<TMap<FSkeletonKey, IdMapPtr>> IdentSetToDataMapping;
 	TSharedPtr<TransformUpdatesForGameThread> TransformUpdateQueue;
 public:
 	virtual void PostInitialize() override;
@@ -162,8 +173,10 @@ protected:
 	
 	//todo: convert conserved attribute to use a timestamp for versioning to create a true temporal shadowstack.
 	AttrMapPtr GetAttribSetShadowByObjectKey(
-		ObjectKey Target, ArtilleryTime Now) const;
-
+		FSkeletonKey Target, ArtilleryTime Now) const;
+	
+	IdMapPtr GetIdSetShadowByObjectKey(
+	FSkeletonKey Target, ArtilleryTime Now) const;
 	TSharedPtr<BufferedMoveEvents> RequestorQueue_Locomos_TripleBuffer;
 
 	static inline long long TotalFirings = 0; //2024 was rough.
@@ -243,9 +256,10 @@ public:
 	FGunKey GetGun(FString GunDefinitionID, FireControlKey MachineKey);
 	FGunKey RegisterExistingGun(FArtilleryGun* toBind, ActorKey ProbableOwner) const;
 	bool ReleaseGun(FGunKey Key, FireControlKey MachineKey);
-
+	
 	//TODO: convert to object key to allow the grand dance of the mesh primitives.
-	AttrPtr GetAttrib(ActorKey Owner, AttribKey Attrib);
+	AttrPtr GetAttrib(FSkeletonKey Owner, E_AttribKey Attrib);
+	IdentPtr GetIdent(FSkeletonKey Owner, Ident Attrib);
 	
 	void RegisterReady(FGunKey Key, FArtilleryFireGunFromDispatch Machine)
 	{
@@ -264,15 +278,22 @@ public:
 		}
 		//TODO: add the rest of the wipe here?
 	}
-	void RegisterAttributes(ObjectKey in, AttrMapPtr Attributes)
+	void RegisterAttributes(FSkeletonKey in, AttrMapPtr Attributes)
 	{
 		AttributeSetToDataMapping->Add(in, Attributes);
 	}
-	void DeregisterAttributes(ObjectKey in)
+	void RegisterRelationships(FSkeletonKey in, IdMapPtr Relationships)
+	{
+		IdentSetToDataMapping->Add(in, Relationships);
+	}
+	void DeregisterAttributes(FSkeletonKey in)
 	{
 		AttributeSetToDataMapping->Remove(in);
 	}
-	
+	void DeregisterRelationships(FSkeletonKey in)
+	{
+		IdentSetToDataMapping->Remove(in);
+	}
 
 	std::atomic_bool UseNetworkInput;
 	bool missedPrior = false;
@@ -299,4 +320,109 @@ private:
 	TUniquePtr<FRunnableThread> WorldSim_Ticklites_Thread;
 	FSharedEventRef StartTicklitesSim;
 	FSharedEventRef StartTicklitesApply;
+};
+
+UCLASS(meta=(ScriptName="AbilitySystemLibrary"))
+class ARTILLERYRUNTIME_API UArtilleryLibrary : public UBlueprintFunctionLibrary
+{
+	GENERATED_BODY()
+public:
+	UFUNCTION(BlueprintCallable, meta = (ScriptName = "GetAttribute", DisplayName = "Get Attribute Of", ExpandBoolAsExecs="bFound"), Category="Artillery|Attributes")
+	static float K2_GetAttrib(FSkeletonKey Owner, E_AttribKey Attrib, bool& bFound)
+	{
+		bFound = false;
+		return implK2_GetAttrib(Owner,Attrib, bFound);
+	}
+
+	static float implK2_GetAttrib(FSkeletonKey Owner, E_AttribKey Attrib, bool& bFound)
+	{
+		
+		bFound = false;
+		if(UArtilleryDispatch::SelfPtr)
+		{
+			if(UArtilleryDispatch::SelfPtr->GetAttrib( Owner, Attrib))
+			{
+				bFound = true;
+				return UArtilleryDispatch::SelfPtr->GetAttrib( Owner, Attrib)->GetCurrentValue();
+			}
+		}
+		return NAN;
+	}
+	UFUNCTION(BlueprintCallable, meta = (ScriptName = "GetRelatedKey", DisplayName = "Get Related Key From", ExpandBoolAsExecs="bFound"), Category="Artillery|Keys")
+	static FSkeletonKey K2_GetIdentity(FSkeletonKey Owner, E_IdentityAttrib Attrib, bool& bFound)
+	{
+		
+		bFound = false;
+		return implK2_GetIdentity(Owner, Attrib, bFound);
+	}
+	
+	static FSkeletonKey implK2_GetIdentity(FSkeletonKey Owner, E_IdentityAttrib Attrib, bool& bFound)
+	{
+		
+		bFound = false;
+		if(UArtilleryDispatch::SelfPtr)
+		{
+			auto ident = UArtilleryDispatch::SelfPtr->GetIdent( Owner, Attrib);
+			if(ident)
+			{
+				bFound = true;
+				return ident->CurrentValue;
+			}
+		}
+		return FSkeletonKey();
+	}
+
+	UFUNCTION(BlueprintCallable, meta = (ScriptName = "GetPlayerRelatedKey", DisplayName = "Get Local Player's Related Key", WorldContext = "WorldContextObject", HidePin = "WorldContextObject", ExpandBoolAsExecs="bFound"),  Category="Artillery|Keys")
+	static FSkeletonKey K2_GetPlayerIdentity(UObject* WorldContextObject, E_IdentityAttrib Attrib, bool& bFound)
+	{
+		
+		bFound = false;
+		auto ptr = WorldContextObject->GetWorld()->GetSubsystem<UCanonicalInputStreamECS>();
+		if(ptr)
+		{
+			auto streamkey = ptr->GetStreamForPlayer(PlayerKey::CABLE);
+			auto key = ptr->ActorByStream(streamkey);
+			if(key)
+			{
+				return  implK2_GetIdentity(key, Attrib, bFound);
+			}
+		}
+		bFound = false;
+		return FSkeletonKey();
+	}
+
+	UFUNCTION(BlueprintCallable, meta = (ScriptName = "GetThisActorAttribute", DisplayName = "Get My Actor's Attribute", DefaultToSelf = "Actor", HidePin = "Actor", ExpandBoolAsExecs="bFound"),  Category="Artillery|Attributes")
+	static float K2_GetMyAttrib(AActor *Actor, E_AttribKey Attrib, bool& bFound)
+	{
+	
+		bFound = false;
+		auto ptr = Actor->GetComponentByClass<UKeyCarry>();
+		if(ptr)
+		{
+			if(FSkeletonKey key = ptr->GetObjectKey())
+			{
+				return implK2_GetAttrib(key, Attrib, bFound);
+			}
+		}
+		bFound = false;
+		return NAN;
+	}
+
+	UFUNCTION(BlueprintCallable, meta = (ScriptName = "GetPlayerAttribute", DisplayName = "Get Local Player's Attribute", WorldContext = "WorldContextObject", HidePin = "WorldContextObject", ExpandBoolAsExecs="bFound"),  Category="Artillery|Attributes")
+	static float K2_GetPlayerAttrib(UObject* WorldContextObject, E_AttribKey Attrib, bool& bFound)
+	{
+		bFound = false;
+		auto ptr = WorldContextObject->GetWorld()->GetSubsystem<UCanonicalInputStreamECS>();
+		if(ptr)
+		{
+			auto streamkey = ptr->GetStreamForPlayer(PlayerKey::CABLE);
+			auto key = ptr->ActorByStream(streamkey);
+			if(key)
+			{
+				return  implK2_GetAttrib(key, Attrib, bFound);
+			}
+		}
+		bFound = false;
+		return NAN;
+	}
 };

@@ -84,7 +84,9 @@ public:
 		return MySquire->Now();
 	};
 
-
+	ActorKey ActorByStream(InputStreamKey Stream);
+	InputStreamKey StreamByActor(ActorKey Stream);
+	
 	static const uint32_t InputConservationWindow = 8192;
 	static const uint32_t AddressableInputConservationWindow = InputConservationWindow - (2 *
 		TheCone::LongboySendHertz);
@@ -287,22 +289,17 @@ public:
 				return std::optional<FArtilleryShell>(CurrentHistory[input]);
 			}
 		};
-
+	public:
 		ActorKey GetActorByInputStream()
 		{
 			return ECSParent->ActorByStream(MyKey); // this lets us avoid exposing the key.
 		};
+		
 
-		InputStreamKey GetInputStreamKeyByPlayer(PlayerKey SessionLevelPlayerID)
+		uint64_t GetHighestGuaranteedInput()
 		{
-			return 0;
-		};
-
-		InputStreamKey GetInputStreamKeyByLocalActorKey(ActorKey LocalLevelActorID)
-		{
-			return 0;
-		};
-
+			return highestInput-1;
+		}
 	protected:
 		volatile uint64_t highestInput = 0; // volatile is utterly useless for its intended purpose. 
 		UCanonicalInputStreamECS* ECSParent;
@@ -349,16 +346,32 @@ protected:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
 	virtual void Deinitialize() override;
-	ActorKey ActorByStream(InputStreamKey Stream);
-	InputStreamKey StreamByActor(ActorKey Stream);
+
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;
 	TSharedPtr<FConservedInputStream> getNewStreamConstruct( PlayerKey ByPlayerConcept);
 	TSharedPtr<TMap<PlayerKey, InputStreamKey>> SessionPlayerToStreamMapping;
 	
-	TSharedPtr<UCanonicalInputStreamECS::FConservedInputStream> GetStream(InputStreamKey StreamKey) const;
+	
 
 public:
+	TSharedPtr<UCanonicalInputStreamECS::FConservedInputStream> GetStream(InputStreamKey StreamKey) const;
+	TSharedPtr<TArray<FArtilleryShell>> Get15LocalHistoricalInputs()
+	{
+		auto streamkey = GetStreamForPlayer(PlayerKey::CABLE);
+		auto sptr = GetStream(streamkey);
+		TSharedPtr<TArray<FArtilleryShell>> Inputs = MakeShareable(new TArray<FArtilleryShell>);
+		if(sptr)
+		{
+			for(int i = 0; i <= 15; ++i)
+			{
+				auto input =  sptr.Get()->peek( sptr->GetHighestGuaranteedInput());
+				Inputs->Add(input.has_value() ? input.value() : FArtilleryShell());
+			}
+		}
+		return Inputs;
+	}
+	
 private:
 	TSharedPtr<TMap<InputStreamKey, TSharedPtr<FConservedInputStream>>> StreamKeyToStreamMapping;
 	TSharedPtr<TMap<ActorKey, FireControlKey>> LocalActorToFireControlMapping;
@@ -367,6 +380,28 @@ private:
 	UBristleconeWorldSubsystem* MySquire; // World Subsystems are the last to go, making this a fairly safe idiom. ish.
 };
 
+UCLASS(meta=(ScriptName="InputSystemLibrary"))
+class ARTILLERYRUNTIME_API UInputECSLibrary : public UBlueprintFunctionLibrary
+{
+	GENERATED_BODY()
+public:
+	UFUNCTION(BlueprintPure, meta = (ScriptName = "Get15PlayerInputs", DisplayName = "Get Last 15 of Local Player's Inputs", WorldContext = "WorldContextObject", HidePin = "WorldContextObject"),  Category="Artillery|Inputs")
+	static void K2_Get15LocalHistoricalInputs(UObject* WorldContextObject, TArray<FArtilleryShell> &Inputs)
+	{
+		auto ptr = WorldContextObject->GetWorld()->GetSubsystem<UCanonicalInputStreamECS>();
+		if(ptr)
+		{
+			auto streamkey = ptr->GetStreamForPlayer(PlayerKey::CABLE);
+			auto sptr = ptr->GetStream(streamkey);
+			for(int i = 0; i <= 15; ++i)
+			{
+				auto input =  sptr.Get()->peek( sptr->GetHighestGuaranteedInput());
+				Inputs.Add(input.has_value() ? input.value() : FArtilleryShell());
+			}
+		}
+	}
+
+};
 
 typedef UCanonicalInputStreamECS UCISArty;
 typedef UCISArty::FConservedInputStream ArtilleryControlStream;

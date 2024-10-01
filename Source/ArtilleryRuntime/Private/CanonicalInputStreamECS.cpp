@@ -15,10 +15,12 @@ void UCanonicalInputStreamECS::OnWorldBeginPlay(UWorld& InWorld)
 		UE_LOG(LogTemp, Warning, TEXT("Artillery::CanonicalInputStream is Operational"));
 		MySquire = GetWorld()->GetSubsystem<UBristleconeWorldSubsystem>();
 		}
+	SelfPtr = this;
 }
 
 void UCanonicalInputStreamECS::Deinitialize()
 {
+	SelfPtr = NULL;
 	UE_LOG(LogTemp, Warning, TEXT("Artillery::CanonicalInputStream is Shutting Down."));
 	Super::Deinitialize();
 }
