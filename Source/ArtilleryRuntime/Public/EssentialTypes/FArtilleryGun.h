@@ -7,11 +7,14 @@
 #include <unordered_map>
 
 #include "ArtilleryCommonTypes.h"
+#include "ArtilleryProjectileDispatch.h"
+#include "FAttributeMap.h"
 #include "FGunKey.h"
 #include "GameplayEffectTypes.h"
 #include "GameplayEffect.h"
 #include "Abilities/GameplayAbility.h"
 #include "UArtilleryAbilityMinimum.h"
+#include "Camera/CameraComponent.h"
 #include "FArtilleryGun.generated.h"
 
 
@@ -38,6 +41,24 @@ public:
 	FGunKey MyGunKey;
 	ActorKey MyProbableOwner;
 	bool ReadyToFire = false;
+
+	UArtilleryDispatch* MyDispatch;
+	UArtilleryProjectileDispatch* MyProjectileDispatch;
+	TSharedPtr<FAttributeMap> MyAttributes;
+
+	// Owner Components
+	TWeakObjectPtr<UCameraComponent> PlayerCameraComponent;
+	TWeakObjectPtr<USceneComponent> FiringPointComponent;
+
+	// 0 MaxAmmo = No Ammo system required
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int MaxAmmo = 30;
+	// Frames to cooldown and fire again
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int Firerate = 50;
+	// Frames to reload
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int ReloadTime = 120;
 
 	//As these are UProperties, they should NOT need to become strong pointers or get attached to root
 	//to _exist_ when created off main thread, but that doesn't solve the bulk of the issues and the guarantee
@@ -75,6 +96,8 @@ public:
 	//cosmetics don't get linked the same way.
 	FArtilleryGun(const FGunKey& KeyFromDispatch)
 	{
+		MyDispatch = nullptr;
+		MyProjectileDispatch = nullptr;
 		MyGunKey = KeyFromDispatch;
 	};
 
@@ -94,7 +117,7 @@ public:
 
 	void UpdateProbableOwner(ActorKey ProbableOwner)
 	{
-		MyProbableOwner= ProbableOwner;
+		MyProbableOwner = ProbableOwner;
 	}
 	//I'm sick and tired of the endless layers of abstraction.
 	//Here's how it works. we fire the abilities from the gun.
@@ -209,7 +232,9 @@ public:
 	//please ensure your child classes respect this as well. thank you!
 	//returns readytofire
 #define ARTGUN_MACROAUTOINIT(MyCodeWillHandleKeys) Super::Initialize(KeyFromDispatch, MyCodeWillHandleKeys, PF, PFC,F,FC,PtF,PtFc,FFC)
-	virtual bool Initialize(const FGunKey& KeyFromDispatch, bool MyCodeWillSetGunKey,
+	virtual bool Initialize(
+		const FGunKey& KeyFromDispatch,
+		const bool MyCodeWillSetGunKey,
 		UArtilleryPerActorAbilityMinimum* PF = nullptr,
 		UArtilleryPerActorAbilityMinimum* PFC = nullptr,
 		UArtilleryPerActorAbilityMinimum* F = nullptr,
@@ -221,6 +246,29 @@ public:
 	{
 		MyGunKey = KeyFromDispatch;
 		//assign gunkey
+		
+		MyDispatch = GWorld->GetSubsystem<UArtilleryDispatch>();
+		MyProjectileDispatch = GWorld->GetSubsystem<UArtilleryProjectileDispatch>();
+
+		TMap<AttribKey, double> InitialGunAttributes = TMap<AttribKey, double>();
+		// TODO: load more stats and dynamically rather than fixed demo values
+		InitialGunAttributes.Add(AMMO, MaxAmmo);
+		InitialGunAttributes.Add(MAX_AMMO, MaxAmmo);
+		InitialGunAttributes.Add(COOLDOWN, Firerate);
+		InitialGunAttributes.Add(COOLDOWN_REMAINING, 0);
+		InitialGunAttributes.Add(RELOAD, ReloadTime);
+		InitialGunAttributes.Add(RELOAD_REMAINING, 0);
+		InitialGunAttributes.Add(TICKS_SINCE_GUN_LAST_FIRED, 0);
+		InitialGunAttributes.Add(AttribKey::LastFiredTimestamp, 0);
+		MyAttributes = MakeShareable(new FAttributeMap(MyGunKey, MyDispatch, InitialGunAttributes));
+		MyDispatch->REGISTER_GUN_FINAL_TICK_RESOLVER(MyGunKey);
+
+		UTransformDispatch* TransformDispatch = MyDispatch->GetWorld()->GetSubsystem<UTransformDispatch>();
+		TWeakObjectPtr<AActor> ActorPointer = TransformDispatch->GetAActorByObjectKey(MyProbableOwner);
+		check(ActorPointer.IsValid());
+PlayerCameraComponent
+		 = ActorPointer->GetComponentByClass<UCameraComponent>();
+		FiringPointComponent = Cast<USceneComponent, UObject>(ActorPointer->GetDefaultSubobjectByName(TEXT("WeaponFiringPoint")));
 		
 		//we'd like to do it earlier, but there's actually not a great moment to do this.
 		if(Prefire == nullptr)

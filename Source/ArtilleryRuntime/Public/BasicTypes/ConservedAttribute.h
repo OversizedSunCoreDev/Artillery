@@ -8,6 +8,7 @@
 #include "Engine/DataTable.h"
 #include "AttributeSet.h"
 #include "Containers/CircularBuffer.h"
+
 #include "ConservedAttribute.generated.h"
 /**
  * Conserved attributes record their last 128 changes.
@@ -29,7 +30,7 @@ struct ARTILLERYRUNTIME_API FConservedAttributeData : public FGameplayAttributeD
 	};
 
 	virtual void SetCurrentValue(double NewValue) {
-		CurrentHistory[CurrentHistory.GetNextIndex(BaseHead)] = CurrentValue;
+		CurrentHistory[CurrentHistory.GetNextIndex(CurrentHead)] = CurrentValue;
 		CurrentValue = NewValue;
 		++CurrentHead;
 	};

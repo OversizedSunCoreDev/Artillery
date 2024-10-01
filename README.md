@@ -69,7 +69,8 @@ To meet these needs, we anticipate a mix of components and gameplay abilities, w
 Finally, this library aims to use GAS in an idiomatic way. It's used extensively for games very much like ours, by very good designers and very smart engineers. It is not safe to assume that the design is bad because it has unusual properties.
 
 ## Reference Matter
-Artillery will also serve to insulate our other tech from spaghetti usage of GAS, in case we do decide to use another tooling for ability and gun composing. [This guide](https://github.com/tranek/GASDocumentation) is a really useful place to start for understanding GAS. We're using it very differently, in a more composition oriented way that'll hopefully ease the dependency management and granularity issues we ran into at Riot if we go with using Game Feature Plugins.
+Artillery will also serve to insulate our other tech from spaghetti usage of GAS, in case we do decide to use another tooling for ability and gun composing. [This guide](https://github.com/tranek/GASDocumentation) is a really useful place to start for understanding GAS. We're using it very differently, in a more composition oriented way that'll hopefully ease the dependency management and granularity issues.
+
 - [Data Driven Gameplay](https://dev.epicgames.com/documentation/en-us/unreal-engine/data-driven-gameplay-elements-in-unreal-engine?application_version=5.4)
 - [GAS, Top-level Docs](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/GameplayAbilitySystem/)
 - [Data Registries](https://dev.epicgames.com/documentation/en-us/unreal-engine/data-registries-in-unreal-engine)

@@ -7,14 +7,13 @@
 #include "BarrageDispatch.h"
 #include "SkeletonTypes.h"
 #include "KeyCarry.h"
-#include "FBarragePrimitive.h"
 #include "FWorldSimOwner.h"
 #include "Components/ActorComponent.h"
 #include "BarrageAutoBox.generated.h"
 
 
-UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
-class UBarrageAutoBox : public UBarrageColliderBase
+UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent), DefaultToInstanced )
+class ARTILLERYRUNTIME_API UBarrageAutoBox : public UBarrageColliderBase
 {
 	GENERATED_BODY()
 
@@ -22,7 +21,12 @@ public:
 	// Sets default values for this component's properties
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool isMovable = true;
-	UBarrageAutoBox();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float OffsetCenterToMatchBoundedShapeX = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float OffsetCenterToMatchBoundedShapeY = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float OffsetCenterToMatchBoundedShapeZ = 0;
 	UBarrageAutoBox(const FObjectInitializer& ObjectInitializer);
 	virtual void Register() override;
 };
@@ -30,11 +34,7 @@ public:
 //CONSTRUCTORS
 //--------------------
 //do not invoke the default constructor unless you have a really good plan. in general, let UE initialize your components.
-inline UBarrageAutoBox::UBarrageAutoBox()
-{
-	PrimaryComponentTick.bCanEverTick = true;
-	MyObjectKey = 0;
-}
+
 // Sets default values for this component's properties
 inline UBarrageAutoBox::UBarrageAutoBox(const FObjectInitializer& ObjectInitializer) : Super(
 	ObjectInitializer)
@@ -42,11 +42,11 @@ inline UBarrageAutoBox::UBarrageAutoBox(const FObjectInitializer& ObjectInitiali
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
 	
+	bWantsInitializeComponent = true;
 	PrimaryComponentTick.bCanEverTick = true;
 	MyObjectKey = 0;
 	
 }
-
 
 //KEY REGISTER, initializer, and failover.
 //----------------------------------
@@ -74,15 +74,20 @@ inline void UBarrageAutoBox::Register()
 	{
 		auto Physics =  GetWorld()->GetSubsystem<UBarrageDispatch>();
 		auto TransformECS =  GetWorld()->GetSubsystem<UTransformDispatch>();
-		auto Box = GetOwner()->CalculateComponentsBoundingBoxInLocalSpace();
+		auto AnyMesh = GetOwner()->GetComponentByClass<UPrimitiveComponent>();
+		auto Boxen = AnyMesh->GetLocalBounds();
+		// Multiply by the scale factor, then multiply by 2 since mesh bounds is radius not diameter
+		auto extents = Boxen.BoxExtent * AnyMesh->BoundsScale * 2; 
 		
-		auto extents = Box.GetSize();
-		auto params = FBarrageBounder::GenerateBoxBounds(GetOwner()->GetActorLocation(),extents.X , extents.Y ,extents.Z);
+		auto params = FBarrageBounder::GenerateBoxBounds(GetOwner()->GetActorLocation(),extents.X, extents.Y, extents.Z,
+			FVector3d(OffsetCenterToMatchBoundedShapeX, OffsetCenterToMatchBoundedShapeY, extents.Z/2));
 		MyBarrageBody = Physics->CreatePrimitive(params, MyObjectKey,  isMovable ? Layers::MOVING : Layers::NON_MOVING);
 		//TransformECS->RegisterObjectToShadowTransform(MyObjectKey, const_cast<UE::Math::TTransform<double>*>(&GetOwner()->GetTransform()));
 		if(MyBarrageBody)
 		{
+			AnyMesh->WakeRigidBody();
 			IsReady = true;
+			AnyMesh->SetSimulatePhysics(false);
 		}
 	}
 	if(IsReady)

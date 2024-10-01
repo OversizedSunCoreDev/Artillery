@@ -13,19 +13,24 @@
 
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
-class UBarrageBoxComponent : public UBarrageColliderBase
+class ARTILLERYRUNTIME_API UBarrageBoxComponent : public UBarrageColliderBase
 {
 	GENERATED_BODY()
 
 public:	
 	// Sets default values for this component's properties
-	UPROPERTY()
+	UPROPERTY(EditAnywhere,BlueprintReadWrite)
 	int XDiam = 30;
-	UPROPERTY()
+	UPROPERTY(EditAnywhere,BlueprintReadWrite)
 	int YDiam = 30;
-	UPROPERTY()
+	UPROPERTY(EditAnywhere,BlueprintReadWrite)
 	int ZDiam = 20;
-	UBarrageBoxComponent();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float OffsetCenterToMatchBoundedShapeX = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float OffsetCenterToMatchBoundedShapeY = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float OffsetCenterToMatchBoundedShapeZ = 0;
 	UBarrageBoxComponent(const FObjectInitializer& ObjectInitializer);
 	virtual void Register() override;
 };
@@ -33,11 +38,7 @@ public:
 //CONSTRUCTORS
 //--------------------
 //do not invoke the default constructor unless you have a really good plan. in general, let UE initialize your components.
-inline UBarrageBoxComponent::UBarrageBoxComponent()
-{
-	PrimaryComponentTick.bCanEverTick = true;
-	MyObjectKey = 0;
-}
+
 // Sets default values for this component's properties
 inline UBarrageBoxComponent::UBarrageBoxComponent(const FObjectInitializer& ObjectInitializer) : Super(
 	ObjectInitializer)
@@ -45,6 +46,7 @@ inline UBarrageBoxComponent::UBarrageBoxComponent(const FObjectInitializer& Obje
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
 	
+	bWantsInitializeComponent = true;
 	PrimaryComponentTick.bCanEverTick = true;
 	MyObjectKey = 0;
 	
@@ -54,7 +56,7 @@ inline UBarrageBoxComponent::UBarrageBoxComponent(const FObjectInitializer& Obje
 
 inline void UBarrageBoxComponent::Register()
 {
-	if(MyObjectKey ==0 )
+	if(MyObjectKey == 0)
 	{
 		if(GetOwner())
 		{
@@ -76,8 +78,9 @@ inline void UBarrageBoxComponent::Register()
 		auto Physics =  GetWorld()->GetSubsystem<UBarrageDispatch>();
 		auto TransformECS =  GetWorld()->GetSubsystem<UTransformDispatch>();
 
-		auto params = FBarrageBounder::GenerateBoxBounds(GetOwner()->GetActorLocation(), XDiam, YDiam ,ZDiam);
-		MyBarrageBody = Physics->CreatePrimitive(params, MyObjectKey, LayersMap::MOVING);
+		auto params = FBarrageBounder::GenerateBoxBounds(GetOwner()->GetActorLocation(), XDiam, YDiam ,ZDiam,
+					FVector3d(OffsetCenterToMatchBoundedShapeX, OffsetCenterToMatchBoundedShapeY, OffsetCenterToMatchBoundedShapeZ));
+		MyBarrageBody = Physics->CreatePrimitive(params, MyObjectKey, Layers::MOVING);
 		//TransformECS->RegisterObjectToShadowTransform(MyObjectKey, const_cast<UE::Math::TTransform<double>*>(&GetOwner()->GetTransform()));
 		if(MyBarrageBody)
 		{

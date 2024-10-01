@@ -20,6 +20,8 @@
 #include "ArtilleryCommonTypes.h"
 #include "FAttributeMap.h"
 #include "FMockArtilleryGun.h"
+#include "FMockBeamCannon.h"
+#include "FMockChairCannon.h"
 #include "FMockDashGun.h"
 #include "TransformDispatch.h"
 #include "Components/ActorComponent.h"
@@ -139,6 +141,7 @@ public:
 	{
 		FActionBitMask IntentBitPattern;
 		IntentBitPattern.buttons = BindIntent;
+		Gun->UpdateProbableOwner(ParentKey);
 		Gun->Initialize(Gun->MyGunKey, false);
 		auto key = MyDispatch->RegisterExistingGun(Gun, ParentKey);
 		pushPatternToRunner(Pattern, APlayer::CABLE, IntentBitPattern, key);
@@ -167,14 +170,15 @@ public:
 			AddTestGun(Intents::A, dummy, IPM::GPress);
 			auto dash = new FMockDashGun(FGunKey("DummyDash", 2));
 			AddTestGun(Intents::B, dash, IPM::GPerPress);
-			
+			auto beam = new FMockBeamCannon(FGunKey("DummyBeam", 3), 200, 4, 150, 5000.0f);
+			AddTestGun(Intents::RTrigger, beam, IPM::GPress);
+			auto chairs = new FMockChairCannon(FGunKey("ChairCannon", 4), 10, 20, 150);
+			AddTestGun(Intents::LTrigger, chairs, IPM::GPerPress);
 		}
 		MyAttributes = MakeShareable(new FAttributeMap(ParentKey, MyDispatch, Attributes));
 
-		UE_LOG(LogTemp, Warning, TEXT("Health: %f"), MyDispatch->GetAttrib(ParentKey, AttributesList::Mana)->GetCurrentValue());
-
-		//DO NOT DO THIS. This is ONLY here until jolt is in place and WILL crash the game.
-		TransformDispatch->RegisterObjectToShadowTransform(ParentKey, GetOwner());
+		UE_LOG(LogTemp, Warning, TEXT("FCM Mana: %f"), MyDispatch->GetAttrib(ParentKey, Attr::Mana)->GetCurrentValue());
+		
 		return ParentKey;
 
 		//right now, we can push all our patterns here as well, and we can use a static set of patterns for
@@ -203,10 +207,10 @@ public:
 			-1
 		);
 		FGameplayAbilitySpecHandle FireHandle = BackboneFiring.Handle;
-		Gun->PreFireGun(FireHandle,
-		AbilityActorInfo.Get(), 
-		FGameplayAbilityActivationInfo(EGameplayAbilityActivationMode::Authority)
-		);
+		Gun->PreFireGun(
+			FireHandle,
+			AbilityActorInfo.Get(),
+			FGameplayAbilityActivationInfo(EGameplayAbilityActivationMode::Authority));
 	};
 
 	void InitializeComponent() override
@@ -237,7 +241,6 @@ public:
 		Super::BeginPlay(); 
 		MyInput = GetWorld()->GetSubsystem<UCanonicalInputStreamECS>();
 		MyDispatch = GetWorld()->GetSubsystem<UArtilleryDispatch>();
-
 	};
 	
 	virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override

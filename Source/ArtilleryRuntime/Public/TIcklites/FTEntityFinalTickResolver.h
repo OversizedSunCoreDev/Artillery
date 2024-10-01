@@ -11,17 +11,17 @@
 	//TICKLITE_CoreReset on the impl aspect
 	//TICKLITE_CheckForExpiration on the impl aspect
 	//TICKLITE_OnExpiration
-	class TLRecharger : public UArtilleryDispatch::TL_ThreadedImpl /*Facaded*/
+	class TLEntityFinalTickResolver : public UArtilleryDispatch::TL_ThreadedImpl /*Facaded*/
 	{
 	public:
-		ObjectKey RechargeTarget;
-		TLRecharger(): TL_ThreadedImpl()
+		FSkeletonKey EntityKey;
+		TLEntityFinalTickResolver(): TL_ThreadedImpl()
 		{
 		}
 
-		TLRecharger(
-			ObjectKey Target
-			) : TL_ThreadedImpl(), RechargeTarget(Target)
+		TLEntityFinalTickResolver(
+			FSkeletonKey Target
+			) : TL_ThreadedImpl(), EntityKey(Target)
 		{
 		}
 		void TICKLITE_StateReset()
@@ -36,8 +36,8 @@
 		{
 			if(bindH != nullptr && bindH->GetCurrentValue() > 0)
 			{
-				auto bindHMax = TL_ThreadedImpl::ADispatch->GetAttrib(RechargeTarget, Max);
-				auto bindHCur = TL_ThreadedImpl::ADispatch->GetAttrib(RechargeTarget, Current);
+				auto bindHMax = TL_ThreadedImpl::ADispatch->GetAttrib(EntityKey, Max);
+				auto bindHCur = TL_ThreadedImpl::ADispatch->GetAttrib(EntityKey, Current);
 				if(
 					(bindHMax != nullptr && bindHMax->GetCurrentValue() > 0) &&
 					(bindHCur != nullptr)) //note that current does not check 0. lmao. it used to.
@@ -53,9 +53,9 @@
 		void TICKLITE_Apply()
 		{
 			//factor the get attr down to the impl.
-			auto ManaRecharge =  TL_ThreadedImpl::ADispatch->GetAttrib(RechargeTarget,  Attr::ManaRechargePerTick);
-			auto ShieldRecharge =  TL_ThreadedImpl::ADispatch->GetAttrib(RechargeTarget, Attr::ShieldsRechargePerTick);
-			auto HealthRecharge =  TL_ThreadedImpl::ADispatch->GetAttrib(RechargeTarget, Attr::HealthRechargePerTick);
+			auto ManaRecharge =  TL_ThreadedImpl::ADispatch->GetAttrib(EntityKey,  Attr::ManaRechargePerTick);
+			auto ShieldRecharge =  TL_ThreadedImpl::ADispatch->GetAttrib(EntityKey, Attr::ShieldsRechargePerTick);
+			auto HealthRecharge =  TL_ThreadedImpl::ADispatch->GetAttrib(EntityKey, Attr::HealthRechargePerTick);
 			
 			RechargeClamp(HealthRecharge, Attr::MaxHealth, Attr::Health);
 			RechargeClamp(ShieldRecharge, Attr::MaxShields, Attr::Shields);
@@ -77,5 +77,5 @@
 		}
 	};
 
-typedef Ticklites::Ticklite<TLRecharger> Recharger;
+typedef Ticklites::Ticklite<TLEntityFinalTickResolver> EntityFinalTickResolver;
 

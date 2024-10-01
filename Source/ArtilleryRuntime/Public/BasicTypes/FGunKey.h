@@ -32,9 +32,9 @@ public:
 	uint64 GunInstanceID;
 	//while actor key has a different behavior, gunkey only applies the mask when switching up to objectkey.
 	//this is because those types are interchangeable for legacy reasons, which I intend to eliminate.
-	operator ObjectKey() const
+	operator FSkeletonKey() const
 	{
-		return ObjectKey(FORGE_SKELETON_KEY(GetTypeHash(GunDefinitionID) + GetTypeHash(GunInstanceID), SKELLY::SFIX_ART_GUNS));
+		return FSkeletonKey(FORGE_SKELETON_KEY(GetTypeHash(GunDefinitionID) + GetTypeHash(GunInstanceID), SKELLY::SFIX_ART_GUNS));
 	}
 	friend uint32 GetTypeHash(const FGunKey& Other)
 	{

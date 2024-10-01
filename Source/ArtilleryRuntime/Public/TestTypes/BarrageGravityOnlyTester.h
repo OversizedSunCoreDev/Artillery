@@ -24,9 +24,9 @@ public:
 	
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	ObjectKey MyObjectKey;
+	FSkeletonKey MyObjectKey;
 	bool IsReady = false;
-	virtual void BeforeBeginPlay(ObjectKey TransformOwner);
+	virtual void BeforeBeginPlay(FSkeletonKey TransformOwner);
 	void Register();
 
 	virtual void OnDestroyPhysicsState() override;
@@ -61,7 +61,7 @@ inline UBarrageGravityOnlyTester::UBarrageGravityOnlyTester(const FObjectInitial
 //---------------------------------
 
 //SETTER: Unused example of how you might set up a registration for an arbitrary key.
-inline void UBarrageGravityOnlyTester::BeforeBeginPlay(ObjectKey TransformOwner)
+inline void UBarrageGravityOnlyTester::BeforeBeginPlay(FSkeletonKey TransformOwner)
 {
 	MyObjectKey = TransformOwner;
 }
@@ -93,7 +93,7 @@ inline void UBarrageGravityOnlyTester::Register()
 		auto Physics =  GetWorld()->GetSubsystem<UBarrageDispatch>();
 		auto TransformECS =  GetWorld()->GetSubsystem<UTransformDispatch>();
 		auto params = FBarrageBounder::GenerateBoxBounds(GetOwner()->GetActorLocation(), 30, 30 ,20);
-		MyBarrageBody = Physics->CreatePrimitive(params, MyObjectKey, LayersMap::MOVING);
+		MyBarrageBody = Physics->CreatePrimitive(params, MyObjectKey, Layers::MOVING);
 		//TransformECS->RegisterObjectToShadowTransform(MyObjectKey, const_cast<UE::Math::TTransform<double>*>(&GetOwner()->GetTransform()));
 		if(MyBarrageBody)
 		{

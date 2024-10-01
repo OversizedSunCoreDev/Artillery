@@ -2,17 +2,39 @@
 
 
 #include "ArtilleryDispatch.h"
-#include <FTRecharger.h>
+#include "FArtilleryGun.h"
+#include <FTEntityFinalTickResolver.h>
+#include <FTGunFinalTickResolver.h>
+#include <FTJumpTimer.h>
 
+#include "FTProjectileFinalTickResolver.h"
 
 
 //Place at the end of the latest initialization-like phase.
 //should we move this lil guy over into ya boy Dispatch? It feels real dispatchy.
-void UArtilleryDispatch::GENERATE_RECHARGE(ObjectKey Self)
+void UArtilleryDispatch::REGISTER_ENTITY_FINAL_TICK_RESOLVER(ActorKey Self)
 {
-	TLRecharger temp = TLRecharger(Self); //this semantic sucks. gotta fix it.
-	this->RequestAddTicklite(MakeShareable(new Recharger(temp)), RECHARGE);
-};
+	TLEntityFinalTickResolver temp = TLEntityFinalTickResolver(Self); //this semantic sucks. gotta fix it.
+	this->RequestAddTicklite(MakeShareable(new EntityFinalTickResolver(temp)), FINAL_TICK_RESOLVE);
+}
+
+void UArtilleryDispatch::REGISTER_PROJECTILE_FINAL_TICK_RESOLVER(uint32 MaximumLifespanInTicks, FSkeletonKey Self)
+{
+	TLProjectileFinalTickResolver temp = TLProjectileFinalTickResolver(MaximumLifespanInTicks, Self);
+	this->RequestAddTicklite(MakeShareable(new ProjectileFinalTickResolver(temp)), FINAL_TICK_RESOLVE);
+}
+
+void UArtilleryDispatch::REGISTER_GUN_FINAL_TICK_RESOLVER(FGunKey Self)
+{
+	TLGunFinalTickResolver temp = TLGunFinalTickResolver(Self); //this semantic sucks. gotta fix it.
+	this->RequestAddTicklite(MakeShareable(new GunFinalTickResolver(temp)), FINAL_TICK_RESOLVE);
+}
+
+void UArtilleryDispatch::INITIATE_JUMP_TIMER(FSkeletonKey Self)
+{
+	FTJumpTimer JumpTimer = FTJumpTimer(Self);
+	this->RequestAddTicklite(MakeShareable(new TL_JumpTimer(JumpTimer)), Normal);
+}
 
 void UArtilleryDispatch::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -22,9 +44,11 @@ void UArtilleryDispatch::Initialize(FSubsystemCollectionBase& Collection)
 	RequestorQueue_Locomos_TripleBuffer = MakeShareable( new TTripleBuffer<TArray<LocomotionParams>>());
 	GunToFiringFunctionMapping = MakeShareable(new TMap<FGunKey, FArtilleryFireGunFromDispatch>());
 	ActorToLocomotionMapping = MakeShareable(new TMap<ActorKey, FArtilleryRunLocomotionFromDispatch>());
-	AttributeSetToDataMapping = MakeShareable( new TMap<ObjectKey, AttrMapPtr>());
+	AttributeSetToDataMapping = MakeShareable( new TMap<FSkeletonKey, AttrMapPtr>());
+	IdentSetToDataMapping = MakeShareable(new TMap<FSkeletonKey, IdMapPtr>());
 	GunByKey = MakeShareable(new TMap<FGunKey, TSharedPtr<FArtilleryGun>>());
 	TL_ThreadedImpl::ADispatch = &ArtilleryTicklitesWorker_LockstepToWorldSim;
+	SelfPtr = this;
 }
 
 void UArtilleryDispatch::PostInitialize()
@@ -47,6 +71,7 @@ void UArtilleryDispatch::OnWorldBeginPlay(UWorld& InWorld)
 		UseNetworkInput.store(true);
 		UBristleconeWorldSubsystem* NetworkAndControls = GetWorld()->GetSubsystem<UBristleconeWorldSubsystem>();
 		UBarrageDispatch* GameSimPhysics = GetWorld()->GetSubsystem<UBarrageDispatch>();
+		HoldOpen = GameSimPhysics->JoltGameSim;
 		ArtilleryTicklitesWorker_LockstepToWorldSim.DispatchOwner = this;
 		ArtilleryTicklitesWorker_LockstepToWorldSim.StartTicklitesApply = StartTicklitesApply;
 		ArtilleryTicklitesWorker_LockstepToWorldSim.StartTicklitesSim = StartTicklitesSim;
@@ -64,18 +89,15 @@ void UArtilleryDispatch::OnWorldBeginPlay(UWorld& InWorld)
 		//TARRAY IS A VALUE TYPE. SO IS TRIPLEBUFF I THINK.
 		ArtilleryAsyncWorldSim.RequestorQueue_Abilities_TripleBuffer = RequestorQueue_Abilities_TripleBuffer;//OH BOY. REFERENCE TIME. GWAHAHAHA.
 		ArtilleryAsyncWorldSim.RequestorQueue_Locomos_TripleBuffer = RequestorQueue_Locomos_TripleBuffer;
+		UBarrageDispatch* PhysicsECS = GetWorld()->GetSubsystem<UBarrageDispatch>();
+		PhysicsECS->GrantFeed();
 		
 		WorldSim_Thread.Reset(FRunnableThread::Create(&ArtilleryAsyncWorldSim, TEXT("ARTILLERY_ONLINE.")));
 		WorldSim_Ticklites_Thread.Reset(FRunnableThread::Create(&ArtilleryTicklitesWorker_LockstepToWorldSim ,TEXT("BARRAGE_ONLINE.")));
 
-		UBarrageDispatch* PhysicsECS = GetWorld()->GetSubsystem<UBarrageDispatch>();
-		PhysicsECS->GrantFeed();
+
 	}
 	
-
-	// Q: how do we get PlayerKey?
-	// ANS: Currently, we don't. 
-	// controlStream = 
 }
 
 void UArtilleryDispatch::Deinitialize()
@@ -100,24 +122,31 @@ void UArtilleryDispatch::Deinitialize()
 		WorldSim_Ticklites_Thread->Kill(false);
 	}
 	AttributeSetToDataMapping->Empty();
+	IdentSetToDataMapping->Empty();
 	GunToFiringFunctionMapping->Empty();
 	ActorToLocomotionMapping->Empty();
+	HoldOpen.Reset();
 }
 
 
 
 
 
-AttrMapPtr UArtilleryDispatch::GetAttribSetShadowByObjectKey(ObjectKey Target,
+AttrMapPtr UArtilleryDispatch::GetAttribSetShadowByObjectKey(FSkeletonKey Target,
 	ArtilleryTime Now) const
 {
 	return AttributeSetToDataMapping->FindChecked(Target);
 }
 
+IdMapPtr UArtilleryDispatch::GetIdSetShadowByObjectKey(FSkeletonKey Target,
+	ArtilleryTime Now) const
+{
+	return IdentSetToDataMapping->FindChecked(Target);
+}
+
 void UArtilleryDispatch::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	RunLocomotions();
 	RunGuns(); // ALL THIS WORK. FOR THIS?! (Okay, that's really cool)
 
 	auto PhysicsECSPillar = GetWorld()->GetSubsystem<UBarrageDispatch>();
@@ -133,6 +162,7 @@ void UArtilleryDispatch::Tick(float DeltaTime)
 			<TSharedPtr<TransformUpdatesForGameThread>>
 			(PhysicsECSPillar->GameTransformPump);
 		}
+		PhysicsECSPillar->BroadcastContactEvents();
 	}
 }
 
@@ -148,6 +178,7 @@ FGunKey UArtilleryDispatch::GetGun(FString GunDefinitionID, ActorKey ProbableOwn
 	//See you soon, Chief.
 	GunDefinitionID = GunDefinitionID.IsEmpty() ? "M6D" : GunDefinitionID; //joking aside, an obvious debug val is needed.
 	FGunKey Key = FGunKey(GunDefinitionID, monotonkey++);
+	TMap<AttribKey, double> InitialGunAttributes = TMap<AttribKey, double>();
 	if(PooledGuns.Contains(GunDefinitionID))
 	{
 		TSharedPtr<FArtilleryGun> repurposing = *PooledGuns.Find(GunDefinitionID);
@@ -199,18 +230,33 @@ void UArtilleryDispatch::QueueResim(FGunKey Key, ArtilleryTime Time)
 	}
 }
 
-AttrPtr UArtilleryDispatch::GetAttrib(ActorKey Owner, AttribKey Attrib)
+AttrPtr UArtilleryDispatch::GetAttrib(FSkeletonKey Owner, AttribKey Attrib)
 {
 		if(AttributeSetToDataMapping->Contains(Owner))
 		{
 			auto a = AttributeSetToDataMapping->FindChecked(Owner);
 			if(a->Contains(Attrib))
 			{
-				return AttributeSetToDataMapping->FindChecked(Owner)->FindChecked(Attrib);
+				return a->FindChecked(Attrib);
 			}
 		}
 		return nullptr;
 }
+
+IdentPtr UArtilleryDispatch::GetIdent(FSkeletonKey Owner, Ident Attrib)
+{
+	if(IdentSetToDataMapping->Contains(Owner))
+	{
+		auto a = IdentSetToDataMapping->FindChecked(Owner);
+		if(a->Contains(Attrib))
+		{
+			return a->FindChecked(Attrib);
+		}
+	}
+	return nullptr;
+}
+
+
 
 void UArtilleryDispatch::RunGuns()
 {

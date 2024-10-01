@@ -36,7 +36,7 @@ public:
 
 	
 	//by this point, this is a record of the functions that should be triggered by the keymapping.
-	//Mapping from keys to gameplay outcomes (functions) happens outside of Artillery.
+	//Mapping from keys to gameplay outcomes (intents) happens outside of Artillery, in cabling.
 	//this means that you can reliably re-execute remote input without needing their control mappings, and is fairly essential
 	//to maintaining sanity. 
 	TheCone::PacketElement MyInputActions; 

@@ -19,7 +19,7 @@ UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent), DefaultToInstanc
 class ARTILLERYRUNTIME_API UPlayerKeyCarry : public UKeyCarry
 {
 	GENERATED_BODY()
-	ObjectKey MyObjectKey;
+	FSkeletonKey MyObjectKey;
 public:
 	DECLARE_MULTICAST_DELEGATE(ActorKeyIsReady)
 	ActorKeyIsReady Retry_Notify;
@@ -64,7 +64,7 @@ public:
 	}
 	
 	//will return an invalid object key if it fails.
-	static inline ObjectKey KeyOfPlayer(AActor* That)
+	static inline FSkeletonKey KeyOfPlayer(AActor* That)
 	{
 	if(That)
 	{
@@ -73,7 +73,7 @@ public:
 			return That->GetComponentByClass<UPlayerKeyCarry>()->MyObjectKey;
 		}
 	}
-	return ObjectKey();
+	return FSkeletonKey();
 	}
 	
 };

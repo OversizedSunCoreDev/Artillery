@@ -59,15 +59,18 @@ namespace Arty
 	DECLARE_DELEGATE_TwoParams(NormalTicklite, ActorKey, ADSKey);
 
 
-		// direct use of RECHARGE is strictly prohibited and will break everything.
+		// direct use of FINAL_TICK_RESOLVE is strictly prohibited and will break everything.
 		// it is possible in modern C++ to create a 2nd enum that hides recharge.
-		// I would like to not do this. please don't use Recharge directly.
+		// I would like to not do this. please don't use FINAL_TICK_RESOLVE directly.
+		// FINAL_TICK_RESOLVE is ONLY for FTFinalTickResolver or a subclass and is reserved
+		// for gameplay implementation of tick-resolving actions like finalizing damage
+		// or applying queued effects.
 	enum TicklitePhase
 	{
-		RECHARGE = 0,
 		Early =  1,
-		Normal = 1024,
-		Late = 2048
+		Normal = 2,
+		Late = 4,
+		FINAL_TICK_RESOLVE = 2048
 	};
 	
 		
@@ -115,7 +118,7 @@ namespace Arty
 
 	//Ever see the motto of the old naval railgun project? I won't spoil it for you.
 	typedef FVector3d VelocityVec;
-	typedef TTuple<ArtilleryTime, ObjectKey, VelocityVec> VelocityEvent;
+	typedef TTuple<ArtilleryTime, FSkeletonKey, VelocityVec> VelocityEvent;
 	
 	typedef TCircularQueue<VelocityEvent> VelocityStack;
 	typedef TSharedPtr<VelocityStack> VelocityEP; //event pump, if you must know.

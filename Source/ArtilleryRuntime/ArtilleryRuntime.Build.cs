@@ -54,7 +54,8 @@ public class ArtilleryRuntime : ModuleRules
 				"Bristlecone",
 				"SkeletonKey",
 				"Barrage",
-				"Cabling"
+				"Cabling",
+				"Niagara",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);

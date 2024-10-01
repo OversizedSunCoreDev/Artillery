@@ -16,7 +16,7 @@
 class FTLinearVelocity : public UArtilleryDispatch::TL_ThreadedImpl /*Facaded*/
 {
 public:
-	ObjectKey VelocityTarget;
+	FSkeletonKey VelocityTarget;
 	VelocityVec PerTickVelocityToApply;
 	uint32 TicksToSplitVelocityOver;
 	uint32 TicksRemaining; //TODO: make this rollback correctly.
@@ -26,7 +26,7 @@ public:
 	}
 
 	FTLinearVelocity(
-		ObjectKey Target,
+		FSkeletonKey Target,
 		VelocityVec Velocity,
 		uint32 Duration
 		) : VelocityTarget(Target), PerTickVelocityToApply(Velocity/Duration), TicksToSplitVelocityOver(Duration),

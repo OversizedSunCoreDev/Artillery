@@ -50,6 +50,7 @@ public:
 		int DallyFramesToOmit = 0) 
 		override
 	{
+		UE_LOG(LogTemp, Warning, TEXT("FMockDashGun prefire"));
 		auto bind =  MyDispatch->GetAttrib(MyProbableOwner,DASH_CURRENCY);
 		if(bind != nullptr && bind->GetCurrentValue() > 1200)
 		{
@@ -68,12 +69,16 @@ public:
 		FGameplayAbilitySpecHandle Handle) 
 		override
 	{
+		UE_LOG(LogTemp, Warning, TEXT("FMockDashGun fire"));
 		//todo: fix parametrica. RequestAdd should probably set the Anchor. tbh, atm, anchor is always the thread but
+		FBLet GameSimPhysicsObject = this->MyDispatch->GetFBLetByObjectKey(MyProbableOwner, this->MyDispatch->GetShadowNow());
+		// TODO: Maybe direct this towards movement directional instead of current velocity?
+		auto ScaledVelocityContinuation = FBarragePrimitive::GetVelocity(GameSimPhysicsObject).GetSafeNormal() * 1000;
 		FTLinearVelocity temp =
 			FTLinearVelocity(
-					MyProbableOwner,
-					ActorInfo->MovementComponent->Velocity.GetSafeNormal() * 200,
-					20
+				MyProbableOwner,
+				VelocityVec(ScaledVelocityContinuation.X, ScaledVelocityContinuation.Y, ScaledVelocityContinuation.Z),
+				20
 			);
 
 		MyDispatch->RequestAddTicklite(
@@ -91,16 +96,19 @@ public:
 		FGameplayAbilitySpecHandle Handle)
 		override
 	{
+		UE_LOG(LogTemp, Warning, TEXT("FMockDashGun post"));
 	};
 
-	virtual bool Initialize(const FGunKey& KeyFromDispatch, bool MyCodeWillHandleKeys,
-	UArtilleryPerActorAbilityMinimum* PF = nullptr,
-	UArtilleryPerActorAbilityMinimum* PFC = nullptr,
-	UArtilleryPerActorAbilityMinimum* F = nullptr,
-	UArtilleryPerActorAbilityMinimum* FC = nullptr,
-	UArtilleryPerActorAbilityMinimum* PtF = nullptr,
-	UArtilleryPerActorAbilityMinimum* PtFc = nullptr,
-	UArtilleryPerActorAbilityMinimum* FFC = nullptr)
+	virtual bool Initialize(
+		const FGunKey& KeyFromDispatch,
+		const bool MyCodeWillHandleKeys,
+		UArtilleryPerActorAbilityMinimum* PF = nullptr,
+		UArtilleryPerActorAbilityMinimum* PFC = nullptr,
+		UArtilleryPerActorAbilityMinimum* F = nullptr,
+		UArtilleryPerActorAbilityMinimum* FC = nullptr,
+		UArtilleryPerActorAbilityMinimum* PtF = nullptr,
+		UArtilleryPerActorAbilityMinimum* PtFc = nullptr,
+		UArtilleryPerActorAbilityMinimum* FFC = nullptr)
 		override
 	{
 		MyDispatch = GWorld->GetSubsystem<UArtilleryDispatch>();

@@ -13,13 +13,12 @@
 
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
-class UBarrageStaticAutoMesh : public UBarrageColliderBase
+class ARTILLERYRUNTIME_API UBarrageStaticAutoMesh : public UBarrageColliderBase
 {
 	GENERATED_BODY()
 
 public:	
 	// Sets default values for this component's properties
-	UBarrageStaticAutoMesh();
 	UBarrageStaticAutoMesh(const FObjectInitializer& ObjectInitializer);
 	virtual void Register() override;
 
@@ -28,12 +27,7 @@ public:
 };
 //CONSTRUCTORS
 //--------------------
-//do not invoke the default constructor unless you have a really good plan. in general, let UE initialize your components.
-inline UBarrageStaticAutoMesh::UBarrageStaticAutoMesh()
-{
-	PrimaryComponentTick.bCanEverTick = true;
-	MyObjectKey = 0;
-}
+
 // Sets default values for this component's properties
 inline UBarrageStaticAutoMesh::UBarrageStaticAutoMesh(const FObjectInitializer& ObjectInitializer) : Super(
 	ObjectInitializer)
@@ -41,6 +35,7 @@ inline UBarrageStaticAutoMesh::UBarrageStaticAutoMesh(const FObjectInitializer& 
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
 	
+	bWantsInitializeComponent = true;
 	PrimaryComponentTick.bCanEverTick = true;
 	MyObjectKey = 0;
 	

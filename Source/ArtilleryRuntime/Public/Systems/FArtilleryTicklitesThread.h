@@ -64,32 +64,32 @@ class FArtilleryTicklitesWorker : public FRunnable {
 	protected:
 	TickliteBuffer QueuedAdds;
 	
-	bool TickliteAdd(TSharedPtr<TicklitePrototype> AllocatedTL,  TicklitePhase Group)
+	TSharedPtr<TicklitePrototype> TickliteAdd(TSharedPtr<TicklitePrototype> AllocatedTL,  TicklitePhase Group)
 	{
 		switch (Group)
 		{
-		case TicklitePhase::RECHARGE :
-			{
-				ExecutionGroups[0].Add(AllocatedTL);
-				return true;
-			}			
 		case TicklitePhase::Early :
 			{
-				ExecutionGroups[1].Add(AllocatedTL);
-				return true;
+				ExecutionGroups[0].Add(AllocatedTL);
+				return AllocatedTL;
 			}
 		case TicklitePhase::Normal :
 			{
-				ExecutionGroups[2].Add( AllocatedTL);
-				return true;
+				ExecutionGroups[1].Add( AllocatedTL);
+				return AllocatedTL;
 			}
 		case TicklitePhase::Late :
 			{
-				ExecutionGroups[3].Add(AllocatedTL);
-				return true;
+				ExecutionGroups[2].Add(AllocatedTL);
+				return AllocatedTL;
 			}
+		case TicklitePhase::FINAL_TICK_RESOLVE :
+			{
+				ExecutionGroups[3].Add(AllocatedTL);
+				return AllocatedTL;
+			}	
 		}
-		return false;
+		return nullptr;
 	}
 	//we may be able to remove sim or move it outside the run loop. I don't think there's anything wrong with simulating
 	//as fast as we can, and it buys us a lot of perf time by not sleeping the thread until it's apply time.
@@ -99,12 +99,12 @@ class FArtilleryTicklitesWorker : public FRunnable {
 	public:
 	//Templating here is used to both make reparenting easier if needed later and to simplify our dependency tree
 	UDispatch* DispatchOwner;
-	TOptional<FTransform> GetCopyOfShadowTransform(ObjectKey Target, ArtilleryTime Now)
+	TOptional<FTransform> GetCopyOfShadowTransform(FSkeletonKey Target, ArtilleryTime Now)
 	{
 		return DispatchOwner->GetTransformShadowByObjectKey(Target,  Now);
 	}
 
-	FBLet GetFBLetByObjectKey(ObjectKey Target, ArtilleryTime Now)
+	FBLet GetFBLetByObjectKey(FSkeletonKey Target, ArtilleryTime Now)
 	{
 		return DispatchOwner->GetFBLetByObjectKey(Target,  Now);
 	}
@@ -124,7 +124,7 @@ class FArtilleryTicklitesWorker : public FRunnable {
 		return DispatchOwner->GetShadowNow();
 	}
 
-	inline AttrPtr GetAttrib(ObjectKey Target, AttribKey Attr)
+	inline AttrPtr GetAttrib(FSkeletonKey Target, AttribKey Attr)
 	{
 		return DispatchOwner->GetAttrib(Target, Attr);
 	}
@@ -198,6 +198,23 @@ class FArtilleryTicklitesWorker : public FRunnable {
 			StartTicklitesApply->Wait();
 			StartTicklitesApply->Reset(); // we can run long on sim, not on apply.
 
+			//if we have any ticklite requests, perform their calculations here and then
+			//add them.
+			//TODO: Reassess 12/10/24
+			//this may cause consistency issues during resim, as artillery guns are fired on the main thread
+			//which is not cadence-locked to the artillery threads. however, during resim, I believe this can be
+			//resolved with the ticklite's add timestamp. and until we have resim, this is a non-issue.
+			while(!QueuedAdds->IsEmpty())
+			{
+				const StampLiteRequest AddTup = *QueuedAdds->Peek();
+				auto ptr =  TickliteAdd(AddTup.Key, AddTup.Value);
+				if(ptr)
+				{
+					CalcINE(ptr);
+				}
+				QueuedAdds->Dequeue();
+			}
+			
 			for (auto& Group : ExecutionGroups)
 			{
 				for(auto Tickable : Group)
@@ -206,12 +223,7 @@ class FArtilleryTicklitesWorker : public FRunnable {
 				}
 			}
 
-			while(!QueuedAdds->IsEmpty())
-			{
-				const StampLiteRequest AddTup = *QueuedAdds->Peek();
-				TickliteAdd(AddTup.Key, AddTup.Value);
-				QueuedAdds->Dequeue();
-			}
+
 				
 		}
 	

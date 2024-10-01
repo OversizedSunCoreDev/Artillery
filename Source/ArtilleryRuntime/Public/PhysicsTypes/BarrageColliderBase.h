@@ -18,15 +18,15 @@ class UBarrageColliderBase : public UActorComponent
 
 public:	
 	// Sets default values for this component's properties
-	UBarrageColliderBase();
 	UBarrageColliderBase(const FObjectInitializer& ObjectInitializer);
+	virtual void InitializeComponent() override;
 	FBLet MyBarrageBody = nullptr;
 	
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	ObjectKey MyObjectKey;
+	FSkeletonKey MyObjectKey;
 	bool IsReady = false;
-	virtual void BeforeBeginPlay(ObjectKey TransformOwner);
+	virtual void BeforeBeginPlay(FSkeletonKey TransformOwner);
 
 	//Colliders must override this.
 	virtual void Register();
@@ -46,11 +46,7 @@ public:
 //CONSTRUCTORS
 //--------------------
 //do not invoke the default constructor unless you have a really good plan. in general, let UE initialize your components.
-inline UBarrageColliderBase::UBarrageColliderBase()
-{
-	PrimaryComponentTick.bCanEverTick = true;
-	MyObjectKey = 0;
-}
+
 // Sets default values for this component's properties
 inline UBarrageColliderBase::UBarrageColliderBase(const FObjectInitializer& ObjectInitializer) : Super(
 	ObjectInitializer)
@@ -59,13 +55,21 @@ inline UBarrageColliderBase::UBarrageColliderBase(const FObjectInitializer& Obje
 	// off to improve performance if you don't need them.
 	
 	PrimaryComponentTick.bCanEverTick = true;
+	
+	bWantsInitializeComponent = true;
 	MyObjectKey = 0;
 	
 }
 //---------------------------------
 
+
+inline void UBarrageColliderBase::InitializeComponent() 
+{
+	Super::InitializeComponent();
+}
+
 //SETTER: Unused example of how you might set up a registration for an arbitrary key.
-inline void UBarrageColliderBase::BeforeBeginPlay(ObjectKey TransformOwner)
+inline void UBarrageColliderBase::BeforeBeginPlay(FSkeletonKey TransformOwner)
 {
 	MyObjectKey = TransformOwner;
 }
