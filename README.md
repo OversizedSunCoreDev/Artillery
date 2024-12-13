@@ -1,4 +1,4 @@
-# Artillery: Guns & Abilities Plugin 
+# Artillery: Guns & Abilities 
 Determinism, threaded input processing, and access management primitives married to a core set of basic tools used to bind to a weapon or character actor in a compositional and elegant way, loosely backwards compatible with GAS while simplifying its usage considerably. Artillery is at 0.1 and is not yet in pre-alpha. It provides, as of right now:
 
 - Integration with GAS through ArtilleryGuns
